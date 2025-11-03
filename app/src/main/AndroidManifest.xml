@@ -9,13 +9,22 @@
         android:label="AndroEasy"
         android:theme="@style/Theme.AndroEasy">
         <activity
-            android:name=".MainActivity"
+            android:name=".SetupActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
+
+        <receiver
+            android:name=".DailyResetReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

@@ -67,7 +67,7 @@ fun CodeDialog(context: MainActivity, onDismiss: () -> Unit) {
         },
         confirmButton = {
             Button(onClick = {
-                VipManager.activateCode(context, code) { success, msg ->
+                SubscriptionManager.activateCode(context, code) { success, msg ->
                     message = msg
                     if (success) {
                         code = ""

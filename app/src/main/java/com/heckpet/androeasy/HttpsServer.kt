@@ -1,5 +1,6 @@
 package com.heckpet.androeasy
 
+import android.content.Context
 import fi.iki.elonen.NanoHTTPD
 import java.io.IOException
 import java.security.KeyPair
@@ -17,14 +18,12 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
-class HttpsServer : NanoHTTPD(8443) {
+class HttpsServer(private val context: Context) : NanoHTTPD(8443) {
 
     init {
         val keyStore = generateKeyStore()
         val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
         kmf.init(keyStore, "password".toCharArray())
-
-        // ← ТРЕТИЙ МЕТОД — РАБОТАЕТ!
         makeSecure(makeSSLSocketFactory(keyStore, kmf), null)
         start()
     }
@@ -69,47 +68,80 @@ class HttpsServer : NanoHTTPD(8443) {
 
         return JcaX509CertificateConverter().getCertificate(builder.build(signer))
     }
+    private fun handleExec(session: IHTTPSession): Response {
+        val cmd = session.parameters["cmd"]?.firstOrNull() ?: "id"
+        val startTime = System.currentTimeMillis()
+
+        val output = RootShell.exec(cmd)
+
+        val duration = ((System.currentTimeMillis() - startTime) / 1000).toInt()
+        SubscriptionManager.addDuTime(context, duration)
+
+        return newFixedLengthResponse(Response.Status.OK, "text/plain", output)
+    }
+
+    private fun handleStatus(): Response {
+        val json = """
+            {
+                "level": "${SubscriptionManager.getLevel(context)}",
+                "prompts_left": ${SubscriptionManager.getRemainingPrompts(context)},
+                "du_time_left": "${SubscriptionManager.getRemainingDuTime(context)}",
+                "active_connections": ${SubscriptionManager.getActiveConnections(context)}/${SubscriptionManager.getMaxConnections(context)}
+            }
+        """.trimIndent()
+        return newFixedLengthResponse(Response.Status.OK, "application/json", json)
+    }
+
+    private fun handleWebInterface(): Response {
+        val html = """
+            <!DOCTYPE html>
+            <html><head><title>AndroEasy</title><meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f0f0f0;}
+            input,button{margin:10px;padding:10px;width:90%;font-size:16px;}
+            pre{background:#fff;padding:15px;text-align:left;border-radius:8px;}</style>
+            </head><body>
+            <h1>AndroEasy</h1>
+            <input type="text" id="cmd" placeholder="Введите команду" value="id">
+            <button onclick="exec()">Выполнить</button>
+            <button onclick="clearAll()">Очистить</button>
+            <pre id="output">Готов к работе...</pre>
+            <script>
+                function exec() {
+                    const cmd = document.getElementById('cmd').value;
+                    fetch('/exec?cmd=' + encodeURIComponent(cmd))
+                        .then(r => r.text())
+                        .then(t => document.getElementById('output').textContent = t);
+                }
+                function clearAll() {
+                    document.getElementById('cmd').value = '';
+                    document.getElementById('output').textContent = '';
+                }
+            </script>
+            </body></html>
+        """.trimIndent()
+        return newFixedLengthResponse(Response.Status.OK, "text/html", html)
+    }
 
     override fun serve(session: IHTTPSession): Response {
-        return when (session.uri) {
-            "/exec" -> {
-                val cmd = session.parameters["cmd"]?.firstOrNull() ?: "id"
-                val output = RootShell.exec(cmd)
-                newFixedLengthResponse(Response.Status.OK, "text/plain", output)
+        // Только для /exec и /status считаем подключение
+        val isExec = session.uri == "/exec"
+        val isStatus = session.uri == "/status"
+
+        if (isExec || isStatus) {
+            if (!SubscriptionManager.incrementConnection(context)) {
+                return newFixedLengthResponse(Response.Status.FORBIDDEN, "text/plain", "Лимит подключений")
             }
-            else -> {
-                val html = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>AndroEasy</title>
-                    <meta name="viewport" content="width=device-width, initial-scale=1">
-                    <style>
-                        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f0f0; }
-                        input, button { margin: 10px; padding: 10px; width: 90%; font-size: 16px; }
-                        pre { background: #fff; padding: 15px; text-align: left; border-radius: 8px; }
-                    </style>
-                </head>
-                <body>
-                    <h1>AndroEasy</h1>
-                    <input type="text" id="cmd" placeholder="Введите команду (например: ls /data)" value="id">
-                    <button onclick="exec()">Выполнить</button>
-                    <button onclick="document.getElementById('cmd').value=''; document.getElementById('output').textContent='';">Очистить</button>
-                    <pre id="output">Готов к работе...</pre>
-                    <script>
-                        function exec() {
-                            const cmd = document.getElementById('cmd').value;
-                            const encodedCmd = encodeURIComponent(cmd);
-                            fetch('/exec?cmd=' + encodedCmd)
-                                .then(r => r.text())
-                                .then(t => document.getElementById('output').textContent = t)
-                                .catch(err => document.getElementById('output').textContent = 'Ошибка: ' + err);
-                        }
-                    </script>
-                </body>
-                </html>
-            """.trimIndent()
-                newFixedLengthResponse(Response.Status.OK, "text/html", html)
+        }
+
+        return try {
+            when (session.uri) {
+                "/exec" -> handleExec(session)
+                "/status" -> handleStatus()
+                else -> handleWebInterface()
+            }
+        } finally {
+            if (isExec || isStatus) {
+                SubscriptionManager.decrementConnection(context)
             }
         }
     }

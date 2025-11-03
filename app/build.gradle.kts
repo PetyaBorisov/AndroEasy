@@ -13,8 +13,8 @@ android {
         applicationId = "com.heckpet.androeasy"
         minSdk = 24
         targetSdk = 35  // ← ОБНОВИ
-        versionCode = 1
-        versionName = "BC5"
+        versionCode = 9
+        versionName = "BC9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -23,7 +23,7 @@ android {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro3"
             )
         }
     }
@@ -42,6 +42,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
@@ -57,6 +58,28 @@ android {
     room {
         schemaDirectory("$projectDir/schemas")
     }
+}
+
+val gigachatId = project.findProperty("GIGACHAT_ID")?.toString() ?: ""
+val gigachatSecret = project.findProperty("GIGACHAT_SECRET")?.toString() ?: ""
+
+androidComponents.onVariants { variant ->
+    variant.buildConfigFields.put(
+        "GIGACHAT_ID",
+        com.android.build.api.variant.BuildConfigField(
+            "String",
+            "\"$gigachatId\"",
+            "GigaChat API ID"
+        )
+    )
+    variant.buildConfigFields.put(
+        "GIGACHAT_SECRET",
+        com.android.build.api.variant.BuildConfigField(
+            "String",
+            "\"$gigachatSecret\"",
+            "GigaChat API Secret"
+        )
+    )
 }
 
 val ktor_version = "2.3.12"
@@ -109,6 +132,7 @@ dependencies {
     // BouncyCastle + OkHttp + Okio
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okio:okio:3.6.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // NanoHTTPD — HTTPS-СЕРВЕР НА ANDROID!
     implementation("org.nanohttpd:nanohttpd:2.3.1")
