@@ -1,8 +1,10 @@
 // GigaChatApi.kt
 package com.heckpet.androeasy
 
+import android.annotation.SuppressLint
 import android.util.Base64
 import android.util.Log
+import com.heckpet.androeasy.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -11,7 +13,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
 import java.io.IOException
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 object GigaChatApi {
     private const val TAG = "GigaChatApi"
@@ -19,20 +25,40 @@ object GigaChatApi {
     private const val CHAT_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
     private const val SCOPE = "GIGACHAT_API_PERS"  // Для физлиц; для бизнеса — GIGACHAT_API_CORP
 
-    // ← ТВОИ ДАННЫЕ ИЗ STUDIO (храни в SharedPrefs или secrets!)
-    private const val CLIENT_ID = BuildConfig.GIGACHAT_ID  // Из Studio
-    private const val CLIENT_SECRET = BuildConfig.GIGACHAT_SECRET  // Из Studio
+    private val CLIENT_ID = BuildConfig.GIGACHAT_ID
+    private val CLIENT_SECRET = BuildConfig.GIGACHAT_SECRET
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
-        .build()  // Для теста; в релизе — убрать логи
+    // УЛУЧШЕНИЕ: Создаем клиент, доверяющий всем сертификатам (включая Минцифры)
+    private val client: OkHttpClient by lazy {
+        try {
+            val trustAllCerts = arrayOf<TrustManager>(@SuppressLint("CustomX509TrustManager")
+            object : X509TrustManager {
+                @SuppressLint("TrustAllX509TrustManager")
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+                @SuppressLint("TrustAllX509TrustManager")
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
+
+            val sslContext = SSLContext.getInstance("SSL")
+            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+            val sslSocketFactory = sslContext.socketFactory
+
+            OkHttpClient.Builder()
+                .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
+                .hostnameVerifier { _, _ -> true }
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+                .build()
+        } catch (e: Exception) {
+            throw RuntimeException(e)
+        }
+    }
 
     private var accessToken: String? = null
     private var tokenExpiry: Long = 0
 
-    // Получаем токен (кешируем на 3600 сек)
     private suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
         if (accessToken != null && System.currentTimeMillis() < tokenExpiry) {
             return@withContext accessToken
@@ -58,7 +84,7 @@ object GigaChatApi {
             if (response.isSuccessful) {
                 val json = JSONObject(response.body?.string() ?: "{}")
                 accessToken = json.optString("access_token")
-                tokenExpiry = System.currentTimeMillis() + (json.optLong("expires_in", 3600) * 1000 - 60000)  // минус 1 мин на обновление
+                tokenExpiry = System.currentTimeMillis() + (json.optLong("expires_in", 3600) * 1000 - 60000)
                 Log.d(TAG, "Токен получен: ${accessToken?.take(20)}...")
                 accessToken
             } else {
@@ -71,8 +97,12 @@ object GigaChatApi {
         }
     }
 
-    // Генерация команды (основной метод)
     suspend fun generateCommand(query: String): String = withContext(Dispatchers.IO) {
+        if (CLIENT_ID.isBlank() || CLIENT_SECRET.isBlank()) {
+            Log.e(TAG, "GigaChat ID/Secret не заданы в local.properties!")
+            return@withContext "Ошибка: Ключи GigaChat не настроены. Добавьте их в local.properties и пересоберите проект."
+        }
+
         val token = getAccessToken() ?: return@withContext "Ошибка: Не удалось авторизоваться в GigaChat"
 
         val prompt = """
@@ -83,15 +113,15 @@ object GigaChatApi {
         """.trimIndent()
 
         val requestBody = JSONObject().apply {
-            put("model", "GigaChat:latest")  // Или "GigaChat-Pro"
+            put("model", "GigaChat:latest")
             put("messages", arrayOf(
                 JSONObject().apply {
                     put("role", "user")
                     put("content", prompt)
                 }
             ))
-            put("temperature", 0.3)  // Низкая для точности
-            put("max_tokens", 50)    // Короткий ответ
+            put("temperature", 0.3)
+            put("max_tokens", 50)
         }.toString().toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()

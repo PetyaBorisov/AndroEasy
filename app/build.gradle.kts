@@ -1,21 +1,33 @@
+import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    id("androidx.room") version "2.6.1"
     id("kotlin-kapt")
 }
 
 android {
     namespace = "com.heckpet.androeasy"
-    compileSdk = 35  // ← ОБНОВИ ДО 35 (Android 15)
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.heckpet.androeasy"
         minSdk = 24
-        targetSdk = 35  // ← ОБНОВИ
+        targetSdk = 34
         versionCode = 9
-        versionName = "BC9"
+        versionName = "BC12.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "GIGACHAT_ID",
+            "\"${gradleLocalProperties(rootDir).getProperty("GIGACHAT_ID")}\""
+        )
+        buildConfigField(
+            "String",
+            "GIGACHAT_SECRET",
+            "\"${gradleLocalProperties(rootDir).getProperty("GIGACHAT_SECRET")}\""
+        )
     }
 
     buildTypes {
@@ -29,11 +41,11 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17  // ← ОБНОВИ ДО 17
+        sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "17"  // ← ОБНОВИ
+        jvmTarget = "17"
         freeCompilerArgs += listOf(
             "-P",
             "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.20"
@@ -54,46 +66,20 @@ android {
             excludes += "/META-INF/versions/9/module-info.class"
         }
     }
-
-    room {
-        schemaDirectory("$projectDir/schemas")
-    }
-}
-
-val gigachatId = project.findProperty("GIGACHAT_ID")?.toString() ?: ""
-val gigachatSecret = project.findProperty("GIGACHAT_SECRET")?.toString() ?: ""
-
-androidComponents.onVariants { variant ->
-    variant.buildConfigFields.put(
-        "GIGACHAT_ID",
-        com.android.build.api.variant.BuildConfigField(
-            "String",
-            "\"$gigachatId\"",
-            "GigaChat API ID"
-        )
-    )
-    variant.buildConfigFields.put(
-        "GIGACHAT_SECRET",
-        com.android.build.api.variant.BuildConfigField(
-            "String",
-            "\"$gigachatSecret\"",
-            "GigaChat API Secret"
-        )
-    )
 }
 
 val ktor_version = "2.3.12"
 
 dependencies {
+    // ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ: Добавляем зависимость, которая ДЕЙСТВИТЕЛЬНО содержит системные API
+    compileOnly("org.robolectric:android-all:14-robolectric-10818077")
+
     implementation(libs.bouncycastle.bcprov)
     implementation(libs.bouncycastle.bcpkix)
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-
-    // ← ОБНОВИ ДО 1.9.0!
     implementation("androidx.activity:activity-compose:1.9.0")
-
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -108,10 +94,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // Room
+    // Room (классический способ)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")  // ← ДОБАВЬ!
+    kapt("androidx.room:room-compiler:2.6.1")
 
     // Shizuku
     implementation("dev.rikka.shizuku:api:13.1.3")
@@ -123,7 +109,7 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // KTOR CLIENT — РАБОЧИЙ!
+    // KTOR CLIENT
     implementation("io.ktor:ktor-client-core:$ktor_version")
     implementation("io.ktor:ktor-client-okhttp:$ktor_version")
     implementation("io.ktor:ktor-client-content-negotiation:$ktor_version")
@@ -134,6 +120,6 @@ dependencies {
     implementation("com.squareup.okio:okio:3.6.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // NanoHTTPD — HTTPS-СЕРВЕР НА ANDROID!
+    // NanoHTTPD
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 }

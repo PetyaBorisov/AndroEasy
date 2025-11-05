@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">AndroEasy</string>
+
+    <!-- Строки для Агента Доверия -->
+    <string name="trust_agent_description">Разблокирует ваше устройство, когда поблизости находится доверенное Bluetooth-устройство.</string>
+    <string name="trust_agent_summary">Держит устройство разблокированным с помощью Easy4Unlock</string>
 </resources>

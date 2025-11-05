@@ -21,7 +21,8 @@ class SetupActivity : ComponentActivity() {
             AndroEasyTheme {
                 SetupWizard { selectedMode ->
                     Prefs.setSetupComplete(this, true)
-                    Prefs.setMode(this, selectedMode)
+                    // Преобразуем enum в строку перед сохранением
+                    Prefs.setMode(this, selectedMode.name)
                     startMainActivity()
                 }
             }

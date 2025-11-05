@@ -20,12 +20,18 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
 class HttpsServer(private val context: Context) : NanoHTTPD(8443) {
 
+    // УЛУЧШЕНИЕ: Убрали автостарт, добавили ручное управление
     init {
         val keyStore = generateKeyStore()
         val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
         kmf.init(keyStore, "password".toCharArray())
         makeSecure(makeSSLSocketFactory(keyStore, kmf), null)
-        start()
+    }
+
+    // УЛУЧШЕНИЕ: Сделали метод start() публичным для внешнего вызова
+    @Throws(IOException::class)
+    public override fun start() {
+        super.start()
     }
 
     private fun generateKeyStore(): KeyStore {
@@ -145,26 +151,6 @@ class HttpsServer(private val context: Context) : NanoHTTPD(8443) {
             }
         }
     }
-}
-
-private fun generateKeyStore(): KeyStore {
-    val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.genKeyPair()
-    val subject = X500Principal("CN=AndroEasy")
-    val cert = JcaX509v3CertificateBuilder(
-        subject,
-        BigInteger.ONE,
-        Date(),
-        Date(System.currentTimeMillis() + 365L * 24 * 60 * 60 * 1000),
-        subject,
-        keyPair.public
-    ).build(JcaContentSignerBuilder("SHA256WithRSA").build(keyPair.private))
-
-    val ks = KeyStore.getInstance("PKCS12")
-    ks.load(null, null)
-    val x509: X509Certificate = java.security.cert.CertificateFactory.getInstance("X.509")
-        .generateCertificate(cert.encoded.inputStream()) as X509Certificate
-    ks.setKeyEntry("key", keyPair.private, "password".toCharArray(), arrayOf(x509))
-    return ks
 }
 
 // Утилита для IP
